@@ -115,6 +115,7 @@ export default function App() {
 /* ---------------- Housekeeper ---------------- */
 
 function Housekeeper({ state, openRoom, setOpenRoom, updateRoom }) {
+  const [enterFor, setEnterFor] = useState(null)
   const mine = state.rooms.filter((r) => r.assignee === 'maya')
   const todo = rankQueue(mine.filter((r) => r.status !== 'clean'), state.clock)
   const done = mine.filter((r) => r.status === 'clean')
@@ -127,6 +128,10 @@ function Housekeeper({ state, openRoom, setOpenRoom, updateRoom }) {
 
   return (
     <main className="screen">
+      {enterFor && (
+        <CantEnterSheet room={enterFor} clock={state.clock} updateRoom={updateRoom}
+          onClose={() => setEnterFor(null)} onDone={() => setEnterFor(null)} />
+      )}
       <div className="progress">
         <div><b>{done.length} of {mine.length}</b> done · ~{Math.floor(minsLeft / 60)}h {minsLeft % 60}m left</div>
         <div className="bar"><i style={{ width: `${(done.length / mine.length) * 100}%` }} /></div>
@@ -149,6 +154,7 @@ function Housekeeper({ state, openRoom, setOpenRoom, updateRoom }) {
           }}>
             {next.status === 'progress' ? 'Continue' : 'Start'} {next.id}
           </button>
+          <button className="secondary" onClick={() => setEnterFor(next)}>🚪 Can't enter</button>
         </section>
       ) : (
         <section className="next empty">🎉 All rooms done. Nice work.</section>
@@ -233,12 +239,6 @@ function RoomScreen({ room, clock, onBack, updateRoom }) {
     onBack()
   }
 
-  const dnd = (why) => {
-    updateRoom(room.id, (r) => ({ status: 'dnd', dndReason: why, retryAt: clock + 120, attempts: (r.attempts ?? 0) + 1 }),
-      `${room.id} moved to come back at ${fmt(clock + 120)}`)
-    onBack()
-  }
-
   const start = () => updateRoom(room.id, { status: 'progress', startedAt: Date.now() })
 
   return (
@@ -288,20 +288,30 @@ function RoomScreen({ room, clock, onBack, updateRoom }) {
         ) : (
           <button className="primary" onClick={start}>Start {room.id}</button>
         )}
-        {room.status !== 'progress' && (
-          <button className="secondary" onClick={() => setSheet('enter')}>🚪 Can't enter</button>
-        )}
+        <button className="secondary" onClick={() => setSheet('enter')}>🚪 Can't enter</button>
       </div>
 
       {sheet === 'enter' && (
-        <Sheet title={`Can't enter ${room.id}`} onClose={() => setSheet(null)}>
-          {['🔕 Do not disturb', '🙋 Guest inside', '🙅 Declined service', '🔒 Double-locked'].map((w) => (
-            <button key={w} className="big-choice" onClick={() => dnd(w)}>{w}</button>
-          ))}
-          <p className="hint">Logged with time and your name. Room comes back in 2 hours.</p>
-        </Sheet>
+        <CantEnterSheet room={room} clock={clock} updateRoom={updateRoom}
+          onClose={() => setSheet(null)} onDone={onBack} />
       )}
     </main>
+  )
+}
+
+function CantEnterSheet({ room, clock, updateRoom, onClose, onDone }) {
+  const pick = (why) => {
+    updateRoom(room.id, (r) => ({ status: 'dnd', dndReason: why, retryAt: clock + 120, attempts: (r.attempts ?? 0) + 1 }),
+      `${room.id} moved to come back at ${fmt(clock + 120)}`)
+    onDone()
+  }
+  return (
+    <Sheet title={`Can't enter ${room.id}`} onClose={onClose}>
+      {['🔕 Do not disturb', '🙋 Guest inside', '🙅 Declined service', '🔒 Double-locked'].map((w) => (
+        <button key={w} className="big-choice" onClick={() => pick(w)}>{w}</button>
+      ))}
+      <p className="hint">Logged with time and your name. Room comes back in 2 hours.</p>
+    </Sheet>
   )
 }
 
